@@ -1,11 +1,11 @@
 
 import os
 import json
+import requests
 from dotenv import load_dotenv
-
-load_dotenv() 
-
 from openai import OpenAI
+
+load_dotenv()
 
 client = OpenAI(
     base_url=os.environ["BASE_URL"],
@@ -13,43 +13,111 @@ client = OpenAI(
 )
 
 SYSTEM_PROMPT = """
-You are a coding agent. Your job is to code. Always code.
+You are a coding agent. Always code.
+Use the get_weather tool to look up current weather for a city.
 """
+
+
+WEATHER_TOOL_SCHEMA = {
+    "type": "function",
+    "name": "get_weather",
+    "description": "Get the current weather for a city.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "city": {
+                "type": "string",
+                "description": "City name, e.g. 'Hyderabad'",
+            }
+        },
+        "required": ["city"],
+        "additionalProperties": False,
+    },
+    "strict": True,
+}
+
+
+def get_weather(city):
+    try:
+        resp = requests.get(
+            f"https://wttr.in/{city}",
+            params={"format": "j1"},
+            headers={"User-Agent": "weather-agent"},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        current = resp.json()["current_condition"][0]
+
+        return json.dumps({
+            "city": city,
+            "temp_c": current["temp_C"],
+            "feels_like_c": current["FeelsLikeC"],
+            "humidity_percent": current["humidity"],
+        })
+    except Exception as e:
+        return json.dumps({"error": f"Could not fetch weather for {city}: {e}"})
 
 
 def main():
     user_input = input("Enter your prompt> ")
 
+    history = [{"role": "user", "content": user_input}]
+
     response = client.responses.create(
         model="deepseek/deepseek-v4-flash",
         instructions=SYSTEM_PROMPT,
-        input=user_input,
+        input=history,
+        tools=[WEATHER_TOOL_SCHEMA],
     )
 
-    # Extract the generated response
-    output = response.output_text
+    while True:
+        calls = [
+            item for item in response.output
+            if item.type == "function_call"
+        ]
 
-    # Extract token usage details
-    usage_data = response.usage
+        if not calls:
+            break
 
-    usage = {
-        "prompt_tokens": usage_data.input_tokens,
-        "completion_tokens": usage_data.output_tokens,
-        "total_tokens": usage_data.total_tokens,
-        "reasoning_tokens": (
-            usage_data.output_tokens_details.reasoning_tokens
-            if usage_data.output_tokens_details
-            else None
+        history.extend(response.output)
+        outputs = []
+
+        for call in calls:
+            city = json.loads(call.arguments)["city"]
+            print(f"\nTool: {call.name}")
+
+            result = get_weather(city)
+
+            outputs.append({
+                "type": "function_call_output",
+                "call_id": call.call_id,
+                "output": result,
+            })
+
+        history.extend(outputs)
+
+        response = client.responses.create(
+            model="deepseek/deepseek-v4-flash",
+            instructions=SYSTEM_PROMPT,
+            input=history,
+            tools=[WEATHER_TOOL_SCHEMA],
+        )
+
+    print("\nAgent:\n", response.output_text)
+
+    usage = response.usage
+    print("\nUsage:")
+    print(json.dumps({
+        "prompt_tokens": usage.input_tokens,
+        "completion_tokens": usage.output_tokens,
+        "total_tokens": usage.total_tokens,
+        "reasoning_tokens": getattr(
+            usage.output_tokens_details, "reasoning_tokens", None
         ),
-        "cached_tokens": (
-            usage_data.input_tokens_details.cached_tokens if usage_data.input_tokens_details else None
+        "cached_tokens": getattr(
+            usage.input_tokens_details, "cached_tokens", None
         ),
-    }
-
-    print(output)
-   
-    print("\nToken Usage:")
-    print(json.dumps(usage, indent=4))
+    }, indent=4))
 
 
 if __name__ == "__main__":
