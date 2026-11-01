@@ -1,9 +1,9 @@
-from .get_weather import get_weather, WEATHER_TOOL_SCHEMA
+from .bash import bash, BASH_TOOL_SCHEMAS
 
 TOOLS = {
-    "get_weather": get_weather,
+    "bash": bash,
 }
 
 TOOL_SCHEMAS = [
-    WEATHER_TOOL_SCHEMA,
+    BASH_TOOL_SCHEMAS
 ]
