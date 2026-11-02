@@ -4,7 +4,7 @@ import json
 import requests
 from dotenv import load_dotenv
 from openai import OpenAI
-from tools import TOOLS, TOOL_SCHEMAS
+from tools import TOOL_SCHEMAS
 
 load_dotenv()
 
@@ -21,76 +21,39 @@ such as looking up information or performing actions you can't do on your own.
 If no tool is needed, answer directly.
 """
 
-def main():
-    user_input = input("Enter your prompt> ")
-
-    history = [{"role": "user", "content": user_input}]
-
+def call_llm(messages):
     response = client.responses.create(
         model="deepseek/deepseek-v4-flash",
         instructions=SYSTEM_PROMPT,
-        input=history,
+        input=messages,
         tools=TOOL_SCHEMAS,
+        max_output_tokens=4096,
     )
 
-    while True:
-        tool_calls = [
-            item for item in response.output if item.type == "function_call"
-        ]
+    usage_data = response.usage
 
-        if not tool_calls:
-            break
-
-        history.extend(response.output)
-        tool_outputs = []
-
-        for tool_call in tool_calls:
-            tool_args = json.loads(tool_call.arguments)
-            print(f"\nTool: {tool_call.name}")
-
-            tool_fn = TOOLS.get(tool_call.name)
-
-            if tool_fn:
-                try:
-                    tool_result = tool_fn(**tool_args)
-                except Exception as exc:
-                    tool_result = f"Tool error: {exc}"
-            else:
-                tool_result = f"Unknown tool: {tool_call.name}"
-
-            print(tool_result)
-
-            tool_outputs.append({
-                "type": "function_call_output",
-                "call_id": tool_call.call_id,
-                "output": str(tool_result),
-            })
-
-        history.extend(tool_outputs)
-
-        response = client.responses.create(
-            model="deepseek/deepseek-v4-flash",
-            instructions=SYSTEM_PROMPT,
-            input=history,
-            tools=TOOL_SCHEMAS,
-        )
-
-    print("\nAgent:\n", response.output_text)
-
-    usage = response.usage
-    print("\nUsage:")
-    print(json.dumps({
-        "prompt_tokens": usage.input_tokens,
-        "completion_tokens": usage.output_tokens,
-        "total_tokens": usage.total_tokens,
-        "reasoning_tokens": getattr(
-            usage.output_tokens_details, "reasoning_tokens", None
+    usage = {
+        "prompt_tokens": usage_data.input_tokens if usage_data else 0,
+        "completion_tokens": usage_data.output_tokens if usage_data else 0,
+        "reasoning_tokens": (
+            getattr(
+                usage_data.output_tokens_details,
+                "reasoning_tokens",
+                None,
+            )
+            if usage_data and usage_data.output_tokens_details
+            else None
         ),
-        "cached_tokens": getattr(
-            usage.input_tokens_details, "cached_tokens", None
+        "cached_tokens": (
+            getattr(
+                usage_data.input_tokens_details,
+                "cached_tokens",
+                None,
+            )
+            if usage_data and usage_data.input_tokens_details
+            else None
         ),
-    }, indent=4))
+    }
 
+    return response, usage
 
-if __name__ == "__main__":
-    main()
