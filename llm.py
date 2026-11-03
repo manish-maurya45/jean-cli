@@ -5,6 +5,7 @@ import requests
 from dotenv import load_dotenv
 from openai import OpenAI
 from tools import TOOL_SCHEMAS
+from skills import skills_prompt
 
 load_dotenv()
 
@@ -13,12 +14,29 @@ client = OpenAI(
     api_key=os.environ["API_KEY"],
 )
 
-SYSTEM_PROMPT = """
-You are a coding agent.
 
-You have access to tools. Use them whenever they help you answer the request,
-such as looking up information or performing actions you can't do on your own.
-If no tool is needed, answer directly.
+# SYSTEM_PROMPT = f"""
+# You are a coding agent.
+
+# You have access to tools. Use them whenever they help you answer the request,
+# such as looking up information or performing actions you can't do on your own.
+# If no tool is needed, answer directly.
+
+# You have below skills available. Each one is a set of instructions for a task.
+# If a skill matches what the user wants, call read_skill first and follow it.
+
+# {skills_prompt()}
+
+# """
+
+SYSTEM_PROMPT = f"""
+You are a coding agent. Always code.
+Use bash to inspect files and execute commands.
+
+You have below skills available. Each one is a set of instructions for a task.
+If a skill matches what the user wants, call read_skill first and follow it.
+
+{skills_prompt()}
 """
 
 def call_llm(messages):
@@ -57,3 +75,6 @@ def call_llm(messages):
 
     return response, usage
 
+
+if __name__ == "__main__":
+    print(SYSTEM_PROMPT)
