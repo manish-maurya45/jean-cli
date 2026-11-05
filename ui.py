@@ -57,9 +57,17 @@ INPUT_STYLE = Style.from_dict({
     "prompt": f"bold {USER}",
     "text-area": "#c0caf5",
     "hint": MUTED,
+    "menu": "bg:#161b2e",
+    "menu.border": "bg:#161b2e #414868",
+    "menu.name": "bg:#1f2a4a #c0caf5",
+    "menu.meta": "bg:#1f2a4a #7f8bb8",
+    "menu.current": "bg:#3d59a1 bold #ffffff",
+    "menu.current.meta": "bg:#3d59a1 #c0caf5",
 })
 
-HINT = "enter send · / commands · alt+enter newline · ctrl-c exit"
+HINT = "enter  send   ·   /  commands   ·   shift+enter / alt+enter  new line   ·   ctrl-c  exit"
+HINT_SHORT = "enter send · / commands · alt+enter newline · ctrl-c exit"
+HINT_MIN_WIDTH = 110
 APP_TITLE = " jean"
 
 # ---------------------------------------------------------------- banner art
@@ -83,8 +91,8 @@ JEAN = [
 ]
 
 # # top-to-bottom gradient, one color per row
-GRADIENT = ["#ff6b6b", "#f25555", "#e23636", "#cc2b2b", "#b01e1e", "#8f1717"]
-# GRADIENT = ["#a9c7ff", "#8ab4ff", "#6a9bff", "#4f84f0", "#386ad6", "#2a52b0"]
+# GRADIENT = ["#ff6b6b", "#f25555", "#e23636", "#cc2b2b", "#b01e1e", "#8f1717"]
+GRADIENT = ["#a9c7ff", "#8ab4ff", "#6a9bff", "#4f84f0", "#386ad6", "#2a52b0"]
 LOGO_MIN_WIDTH = 66
 
 def banner_logo():
@@ -194,10 +202,50 @@ class UI:
     def _hint(self):
         return Window(
             FormattedTextControl(
-                HINT
+                lambda: [(
+                    "class:hint",
+                    HINT if self.console.width >= HINT_MIN_WIDTH else HINT_SHORT,
+                )]
             ),
             height=1,
             align=WindowAlign.CENTER,
+        )
+
+    def _menu_window(self, area):
+        """Slash-command list drawn above the input box (keeps a 3-row gap when closed)."""
+        GAP = 3
+
+        def state():
+            return area.buffer.complete_state
+
+        def rows():
+            s = state()
+            return min(len(s.completions), MENU_ROWS) if s else 0
+
+        def render():
+            s = state()
+            if not s:
+                return []
+            comps = s.completions
+            idx = s.complete_index                      # None until you press up/down
+            start = max(idx - MENU_ROWS + 1, 0) if idx is not None else 0
+            visible = comps[start:start + MENU_ROWS]
+            name_w = max(len(c.text) for c in comps) + 2
+
+            frags = [("", "\n")] * max(GAP - len(visible), 0)   # keep menu hugging the box
+            for i, c in enumerate(visible, start):
+                cur = i == idx
+                frags.append(("class:menu.current" if cur else "class:menu.name",
+                              f" {c.text:<{name_w}}"))
+                frags.append(("class:menu.current.meta" if cur else "class:menu.meta",
+                              f"{c.display_meta_text} "))
+                if i != start + len(visible) - 1:
+                    frags.append(("", "\n"))
+            return frags
+
+        return Window(
+            FormattedTextControl(render),
+            height=lambda: Dimension.exact(max(rows(), GAP)),
         )
 
     def _prompt_layout(self, area):
@@ -206,7 +254,7 @@ class UI:
 
         middle = HSplit([
             Window(height=1),
-            # self._menu_window(area),          # menu lives above the input box
+            self._menu_window(area),          # menu lives above the input box
             Frame(area, style="class:input"),
             Window(height=1),
             self._hint(),
