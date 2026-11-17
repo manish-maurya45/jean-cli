@@ -6,6 +6,8 @@ from tools import TOOLS
 from ui import ui
 from commands import SlashCompleter, all_commands
 
+from context import reminder
+
 
 def new_history():
     return [{"role": "system", "content": SYSTEM_PROMPT}]
@@ -77,7 +79,7 @@ def main():
 
         while True:
             with ui.working():
-                response, usage = call_llm(messages)
+                response, usage = call_llm(messages + [reminder()])
 
             # Preserve model output items, including function calls.
             messages.extend(
