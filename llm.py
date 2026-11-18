@@ -1,7 +1,6 @@
 
 import os
 import json
-import requests
 from dotenv import load_dotenv
 from openai import OpenAI
 from tools import TOOL_SCHEMAS
@@ -15,23 +14,21 @@ client = OpenAI(
 )
 
 
-# SYSTEM_PROMPT = f"""
-# You are a coding agent.
-
-# You have access to tools. Use them whenever they help you answer the request,
-# such as looking up information or performing actions you can't do on your own.
-# If no tool is needed, answer directly.
-
-# You have below skills available. Each one is a set of instructions for a task.
-# If a skill matches what the user wants, call read_skill first and follow it.
-
-# {skills_prompt()}
-
-# """
-
 SYSTEM_PROMPT = f"""
 You are a coding agent. Always code.
 Use bash to inspect files and execute commands.
+
+
+For any task that takes more than one step, call write_todos first and plan it
+out. Send the whole list every time you call it - it replaces the old one.
+Keep exactly one task in_progress, mark it done the moment it is finished, and
+move the next one to in_progress in the same call. Do not batch up completions
+at the end. Skip the tool entirely for single-step tasks; it is noise there.
+
+The current list is injected back to you every turn inside <todos> tags, so
+that block - not the transcript - is the truth about where you are.
+
+Your current working directory is: {os.getcwd()}
 
 You have below skills available. Each one is a set of instructions for a task.
 If a skill matches what the user wants, call read_skill first and follow it.
@@ -78,3 +75,4 @@ def call_llm(messages):
 
 if __name__ == "__main__":
     print(SYSTEM_PROMPT)
+

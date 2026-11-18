@@ -7,6 +7,7 @@ from ui import ui
 from commands import SlashCompleter, all_commands
 
 from context import reminder
+from tools.todos import current_status
 
 
 def new_history():
@@ -78,7 +79,7 @@ def main():
         })
 
         while True:
-            with ui.working():
+            with ui.working(label=current_status()):
                 response, usage = call_llm(messages + [reminder()])
 
             # Preserve model output items, including function calls.

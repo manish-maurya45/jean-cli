@@ -4,12 +4,15 @@ It goes at the END of the message list so the stable prefix in front of it
 stays cached.
 """
 
-from utils import env_info
-
+from .env_info import env_info
+from .todos_note import todos_note
 
 def reminder():
     """The block we append to the messages on every turn."""
     return {
         "role": "user",
-        "content": env_info(),
+        "content": env_info() + todos_note(),
     }
+
+if __name__ == "__main__":
+    print(reminder())
