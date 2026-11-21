@@ -9,6 +9,7 @@ from commands import SlashCompleter, all_commands
 from context import reminder
 from tools.todos import current_status
 
+from permissions import check
 
 def new_history():
     return [{"role": "system", "content": SYSTEM_PROMPT}]
@@ -90,8 +91,9 @@ def main():
 
             ui.usage(usage)
 
-            if response.output_text:
+            if (response.output_text or "").strip():
                 ui.agent(response.output_text)
+
 
             tool_calls = [
                 item
@@ -102,6 +104,33 @@ def main():
             if not tool_calls:
                 break
 
+            # for tool_call in tool_calls:
+            #     args = json.loads(tool_call.arguments)
+            #     tool = TOOLS.get(tool_call.name)
+
+            #     if tool is None:
+            #         result = f"Unknown tool: {tool_call.name}"
+            #     else:
+            #         try:
+            #             result = tool(**args)
+
+            #             action, reason = check(tool_call.function.name, args)
+            #             if action == "deny":
+            #                 result = f"Blocked by policy: {reason}"
+            #             elif action == "ask" and not ui.approve(reason):
+            #                 result = "The user denied this tool call."
+            #             else:
+            #                 result = TOOLS[tool_call.function.name](**args)
+            #         except Exception as exc:
+            #             result = f"Tool error: {exc}"
+
+            #     ui.tool(tool_call.name, args, result)
+
+            #     messages.append({
+            #         "type": "function_call_output",
+            #         "call_id": tool_call.call_id,
+            #         "output": str(result),
+            #     })
             for tool_call in tool_calls:
                 args = json.loads(tool_call.arguments)
                 tool = TOOLS.get(tool_call.name)
@@ -109,10 +138,17 @@ def main():
                 if tool is None:
                     result = f"Unknown tool: {tool_call.name}"
                 else:
-                    try:
-                        result = tool(**args)
-                    except Exception as exc:
-                        result = f"Tool error: {exc}"
+                    action, reason = check(tool_call.name, args)
+
+                    if action == "deny":
+                        result = f"Blocked by policy: {reason}"
+                    elif action == "ask" and not ui.approve(reason):
+                        result = "The user denied this tool call."
+                    else:
+                        try:
+                            result = tool(**args)
+                        except Exception as exc:
+                            result = f"Tool error: {exc}"
 
                 ui.tool(tool_call.name, args, result)
 

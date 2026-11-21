@@ -25,6 +25,12 @@ from prompt_toolkit.styles import Style
 from prompt_toolkit.widgets import Frame, TextArea
 from prompt_toolkit.widgets.base import Border
 
+from prompt_toolkit.layout import Layout, Window
+from rich.color import Color
+
+import shutil
+import textwrap
+
 # Rounded corners for prompt_toolkit's Frame (inner input box)
 Border.TOP_LEFT = "╭"
 Border.TOP_RIGHT = "╮"
@@ -377,6 +383,95 @@ class UI:
     def user(self, text):
         """No-op: ask() already echoes the question into the transcript."""
         return
+
+    def approve(self, reason):
+        accent = Color.parse(ACCENT).get_truecolor().hex  # rich color -> hex for prompt_toolkit
+        tool = Color.parse(TOOL).get_truecolor().hex
+        options = [("Yes", "run it"), ("No", "skip it and tell the model")]
+        selected = [0]  # Yes is the default
+
+        # wrap the reason ourselves so we know exactly how tall the box must be
+        width = max(20, shutil.get_terminal_size().columns - 6)
+        reason_lines = textwrap.wrap(reason, width) or [""]
+        # reason + blank + options + blank + hint, plus 2 border rows
+        height = len(reason_lines) + 1 + len(options) + 1 + 1 + 2
+
+        kb = KeyBindings()
+
+        @kb.add("up")
+        @kb.add("k")
+        def _(event):
+            selected[0] = (selected[0] - 1) % len(options)
+
+        @kb.add("down")
+        @kb.add("j")
+        @kb.add("tab")
+        def _(event):
+            selected[0] = (selected[0] + 1) % len(options)
+
+        @kb.add("enter")
+        def _(event):
+            event.app.exit(result=selected[0] == 0)
+
+        @kb.add("y")
+        def _(event):
+            event.app.exit(result=True)
+
+        @kb.add("n")
+        @kb.add("escape", eager=True)
+        @kb.add("c-c")
+        @kb.add("c-d")
+        def _(event):
+            event.app.exit(result=False)
+
+        def render():
+            out = [("class:reason", " " + "\n ".join(reason_lines) + "\n\n")]
+            for i, (label, hint) in enumerate(options):
+                if i == selected[0]:
+                    out += [("class:accent", f"  ❯ {label}"), ("class:hint", f"  {hint}\n")]
+                else:
+                    out += [("class:option", f"    {label}\n")]
+            out.append(("class:hint", "\n  ↑/↓ move · enter confirm · y/n shortcut"))
+            return out
+
+        app = Application(
+            layout=Layout(
+                Frame(
+                    Window(FormattedTextControl(render)),
+                    title="Approval",
+                    height=height,
+                )
+            ),
+            key_bindings=kb,
+            style=Style.from_dict({
+                "frame.border": accent,
+                "frame.label": f"bold {accent}",
+                "reason": f"bold {tool}",
+                "accent": f"bold {accent}",
+                "option": "#888888",
+                "hint": "#666666",
+            }),
+            erase_when_done=True,  # box disappears after choosing
+        )
+
+        self.console.print()  # spacer so the top border doesn't overwrite the usage line
+
+        try:
+            allowed = app.run()
+        except (EOFError, KeyboardInterrupt):
+            allowed = False
+
+        # the box is erased after choosing, so leave a one-line record of what happened
+        self.console.print(
+            Padding(
+                Text.assemble(
+                    ("✔ allowed  ", "bold green") if allowed else ("✘ denied  ", "bold red"),
+                    (reason, "dim"),
+                ),
+                (0, 0, 0, 2),
+            )
+        )
+        return allowed
 
     def agent(self, text):
         self._emit(
