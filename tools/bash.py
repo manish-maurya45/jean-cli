@@ -1,18 +1,11 @@
-
-import subprocess
-
+import sandbox
+from ui import ui
 
 def bash(command):
-    result = subprocess.run(
-        command,
-        shell=True,
-        capture_output=True,
-        text=True,
-        timeout=60,
-    )
+    cmd_preview = command if len(command) <= 30 else command[:27] + "..."
+    with ui.working(f"executing {cmd_preview} bash command in the sandbox {sandbox.name()} ..."):
+        result = sandbox.run(command)
     return result.stdout + result.stderr
-
-
 
 BASH_TOOL_SCHEMAS = {
     "type": "function",
